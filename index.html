@@ -139,7 +139,8 @@ class Entity {
 
 /* Player */
 const player = new Entity(TILE*2 + 4, TILE*2 + 4, 22, 28);
-player.speed = 1.8;
+// pixels per second
+player.speed = 120;
 player.facing = 'down'; // up/down/left/right
 player.score = 0;
 player.attackCooldown = 0;
@@ -151,7 +152,8 @@ player.attackDamage = 6;
 class Enemy extends Entity {
   constructor(x,y){
     super(x,y,20,24);
-    this.speed = 0.9 + Math.random()*0.5;
+   // enemy speed in pixels per second (slower than player)
+    this.speed = 40 + Math.random()*20;
     this.maxHp = 8 + Math.floor(Math.random()*6);
     this.hp = this.maxHp;
     this.colorHue = 20 + Math.random()*80;
@@ -375,7 +377,8 @@ function drawEntity(ent){
   // basic body
   if (ent === player){
     // player color and simple leg animation by oscillation
-    walkAnim += 0.12 * Math.hypot(player.vx,player.vy);
+    // scale animation by movement speed (player.vx/vy are px/s), dt is seconds
+    walkAnim += 0.02 * Math.hypot(player.vx, player.vy) * (lastDt || 0.016);
     const legOffset = Math.sin(walkAnim)*2;
     // body
     ctx.fillStyle = '#bfe0ff';
