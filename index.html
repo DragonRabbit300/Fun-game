@@ -3,18 +3,25 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Dungeon Crawler with Progression</title>
+<title>Dungeon Crawler with Level-Up Choices</title>
 <style>
   body {margin:0;font-family:system-ui;background:#071027;color:#e6eef8;display:flex;justify-content:center;align-items:center;height:100vh;}
   canvas{background:#091018;border-radius:8px;}
   #hud{margin-top:10px;color:#94a3b8;font-size:14px;}
-  button{background:#f59e0b;color:#071027;padding:6px 12px;border:none;border-radius:6px;margin-left:6px;cursor:pointer;}
+  #levelUpMenu{display:none;text-align:center;margin-top:8px;}
+  #levelUpMenu button{background:#f59e0b;color:#071027;padding:6px 12px;border:none;border-radius:6px;margin:4px;cursor:pointer;}
 </style>
 </head>
 <body>
 <div>
   <canvas id="c" width="720" height="480"></canvas>
   <div id="hud"></div>
+  <div id="levelUpMenu">
+    <p>Level Up! Choose a bonus:</p>
+    <button id="lvlAtk">Attack +2</button>
+    <button id="lvlHP">Max HP +10</button>
+    <button id="lvlSpd">Speed +10</button>
+  </div>
   <button id="startBtn">Start Game</button>
   <button id="restartBtn" style="display:none">Restart</button>
 </div>
@@ -22,16 +29,19 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
+const hud = document.getElementById('hud');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+const levelUpMenu = document.getElementById('levelUpMenu');
+const btnAtk = document.getElementById('lvlAtk');
+const btnHP  = document.getElementById('lvlHP');
+const btnSpd = document.getElementById('lvlSpd');
 
 const TILE = 32;
 const MAP_COLS = 22;
 const MAP_ROWS = 14;
 canvas.width = TILE*MAP_COLS;
 canvas.height = TILE*MAP_ROWS;
-
-const hud = document.getElementById('hud');
-const startBtn = document.getElementById('startBtn');
-const restartBtn = document.getElementById('restartBtn');
 
 let keys={};
 window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key===" ")e.preventDefault();});
@@ -55,7 +65,6 @@ const rawMap=[
 "1111111111111111111111",
 ];
 const MAP = rawMap.map(r=>r.split('').map(Number));
-
 function isWallTile(c,r){return r<0||c<0||r>=MAP_ROWS||c>=MAP_COLS||MAP[r][c]===1;}
 function collideWithMap(x,y,w,h){const l=Math.floor(x),r=Math.floor(x+w-1),t=Math.floor(y),b=Math.floor(y+h-1);return isWallTile(l,t)||isWallTile(r,t)||isWallTile(l,b)||isWallTile(r,b);}
 
@@ -75,21 +84,16 @@ player.level=1;
 player.xp=0;
 player.xpToNext=50;
 player.statBonus={attack:0,maxHP:0,speed:0};
+player.levelingUp=false;
 
 function gainXP(amount){
   player.xp+=amount;
-  if(player.xp>=player.xpToNext){
-    player.level++;
+  if(player.xp>=player.xpToNext && !player.levelingUp){
+    player.levelingUp=true;
     player.xp-=player.xpToNext;
+    player.level++;
     player.xpToNext=Math.floor(player.xpToNext*1.5);
-    // Player gets stronger
-    player.statBonus.attack+=2;
-    player.statBonus.maxHP+=8;
-    player.statBonus.speed+=5;
-    player.attackDamage=6+player.statBonus.attack;
-    player.maxHp=20+player.statBonus.maxHP;
-    player.hp=player.maxHp;
-    player.speed=120+player.statBonus.speed;
+    showLevelUpMenu();
   }
 }
 
@@ -111,19 +115,14 @@ class Enemy extends Entity{
     else {this.vx*=0.95; this.vy*=0.95;}
   }
 }
-
 let enemies=[];
 
 /* ---- Spawn Open Tile ---- */
 function findOpenTile(){
   let x,y;
-  do{
-    x=Math.floor(Math.random()*MAP_COLS);
-    y=Math.floor(Math.random()*MAP_ROWS);
-  }while(isWallTile(x,y));
+  do{ x=Math.floor(Math.random()*MAP_COLS); y=Math.floor(Math.random()*MAP_ROWS);}while(isWallTile(x,y));
   return {x,y};
 }
-
 function spawnPlayer(){const t=findOpenTile();player.x=t.x*TILE+4;player.y=t.y*TILE+4;}
 function spawnEnemies(count=6){enemies=[];let tries=0;while(enemies.length<count&&tries<500){tries++;const t=findOpenTile();const px=t.x*TILE+6;const py=t.y*TILE+6;if(Math.hypot(px-player.x,py-player.y)<80)continue;enemies.push(new Enemy(px,py));}}
 
@@ -135,6 +134,7 @@ function endGame(){running=false;restartBtn.style.display='inline-block';}
 
 /* ---- Input ---- */
 function handleInput(dt){
+  if(player.levelingUp)return;
   let mx=0,my=0;
   if(keys['arrowleft']||keys['a'])mx-=1;
   if(keys['arrowright']||keys['d'])mx+=1;
@@ -176,6 +176,7 @@ function doAttackHit(){
 
 /* ---- Update ---- */
 function update(dt){
+  if(player.levelingUp)return;
   handleInput(dt);
   moveEntity(player,dt);
   if(player.attackCooldown>0)player.attackCooldown-=dt*1000;
@@ -217,7 +218,7 @@ function drawUI(){ctx.fillStyle='white';ctx.font='16px monospace';ctx.textAlign=
 function loop(now){
   const dt=Math.min(32,(now-lastTime))/1000;
   lastTime=now;lastDt=dt;
-  if(running)update(dt);
+  if(running && !player.levelingUp)update(dt);
   ctx.clearRect(0,0,canvas.width,canvas.height);
   drawMap();
   enemies.forEach(e=>{if(!e.dead)drawEntity(e);});
@@ -227,7 +228,25 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 
-/* ---- UI ---- */
+/* ---- Level Up Buttons ---- */
+btnAtk.onclick = () => { player.attackDamage += 2; closeLevelUpMenu(); }
+btnHP.onclick  = () => { player.maxHp += 10; player.hp = player.maxHp; closeLevelUpMenu(); }
+btnSpd.onclick = () => { player.speed += 10; closeLevelUpMenu(); }
+
+function showLevelUpMenu(){
+  running=false;
+  levelUpMenu.style.display='block';
+}
+
+function closeLevelUpMenu(){
+  levelUpMenu.style.display='none';
+  player.levelingUp=false;
+  running=true;
+  lastTime=performance.now();
+  requestAnimationFrame(loop);
+}
+
+/* ---- UI Buttons ---- */
 startBtn.addEventListener('click',()=>startGame());
 restartBtn.addEventListener('click',()=>startGame());
 
