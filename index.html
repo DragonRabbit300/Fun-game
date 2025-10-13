@@ -58,34 +58,31 @@
 
 <script>
 /* ---------------------------
-   Mini Dungeon Crawler
-   Single-file. No external assets.
-   Controls: WASD or arrow keys to move, Space to attack.
-   --------------------------- */
+   Mini Dungeon Crawler (fixed movement)
+   Controls: WASD / Arrows to move, Space to attack.
+--------------------------- */
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
-const SCALE = 2; // drawing scale multiplier for crisp look
-const TILE = 32; // tile pixel size
+const TILE = 32;
 const MAP_COLS = 22;
 const MAP_ROWS = 14;
-
-// resize to logical pixel size (keeps canvas CSS width responsive)
 canvas.width = TILE * MAP_COLS;
 canvas.height = TILE * MAP_ROWS;
 
-// DOM elements
 const hud = document.getElementById('hud');
 const startBtn = document.getElementById('startBtn');
 const restartBtn = document.getElementById('restartBtn');
 
 let keys = {};
-window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key === " "){ e.preventDefault(); }});
+window.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key === " ") e.preventDefault();
+});
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
-/* ---------- Map: 0-floor,1-wall ---------- */
-/* simple dungeon layout — modify rows to change map */
+/* ---------- Map Layout ---------- */
 const rawMap = [
   "1111111111111111111111",
   "1000000000000000000001",
@@ -102,399 +99,299 @@ const rawMap = [
   "1000000000000000000001",
   "1111111111111111111111",
 ];
+const MAP = rawMap.map(r => r.split('').map(Number));
 
-/* Convert to 2D int array */
-const MAP = rawMap.map(row => row.split('').map(ch => parseInt(ch)));
-
-function isWallTile(col,row){
-  if (row<0||col<0||row>=MAP_ROWS||col>=MAP_COLS) return true;
-  return MAP[row][col] === 1;
+function isWallTile(c,r){
+  if (r<0||c<0||r>=MAP_ROWS||c>=MAP_COLS) return true;
+  return MAP[r][c] === 1;
 }
-
-/* Helper: clamp movement to avoid walls */
 function collideWithMap(x,y,w,h){
-  // check four corners
   const left = Math.floor(x / TILE);
   const right = Math.floor((x + w - 1) / TILE);
   const top = Math.floor(y / TILE);
   const bottom = Math.floor((y + h - 1) / TILE);
-  return isWallTile(left,top) || isWallTile(right,top) || isWallTile(left,bottom) || isWallTile(right,bottom);
+  return isWallTile(left,top)||isWallTile(right,top)||isWallTile(left,bottom)||isWallTile(right,bottom);
 }
 
 /* ---------- Entities ---------- */
-class Entity {
+class Entity{
   constructor(x,y,w,h){
-    this.x = x; this.y = y; this.w = w; this.h = h;
-    this.vx = 0; this.vy = 0;
-    this.hp = 10;
-    this.maxHp = 10;
-    this.dead = false;
+    this.x=x;this.y=y;this.w=w;this.h=h;
+    this.vx=0;this.vy=0;
+    this.hp=10;this.maxHp=10;this.dead=false;
   }
-  center(){ return {x: this.x + this.w/2, y: this.y + this.h/2}; }
-  intersects(other){
-    return !(this.x + this.w <= other.x || this.x >= other.x + other.w ||
-             this.y + this.h <= other.y || this.y >= other.y + other.h);
+  center(){return {x:this.x+this.w/2,y:this.y+this.h/2};}
+  intersects(o){
+    return !(this.x+this.w<=o.x||this.x>=o.x+o.w||this.y+this.h<=o.y||this.y>=o.y+o.h);
   }
 }
 
-/* Player */
-const player = new Entity(TILE*2 + 4, TILE*2 + 4, 22, 28);
-// pixels per second
-player.speed = 120;
-player.facing = 'down'; // up/down/left/right
-player.score = 0;
-player.attackCooldown = 0;
-player.attackDuration = 0;
-player.attackRange = 28;
-player.attackDamage = 6;
+const player=new Entity(TILE*2+4,TILE*2+4,22,28);
+player.speed=120; // pixels/sec
+player.facing='down';
+player.score=0;
+player.attackCooldown=0;
+player.attackDuration=0;
+player.attackRange=28;
+player.attackDamage=6;
 
-/* Enemy simple class */
-class Enemy extends Entity {
+class Enemy extends Entity{
   constructor(x,y){
     super(x,y,20,24);
-   // enemy speed in pixels per second (slower than player)
-    this.speed = 40 + Math.random()*20;
-    this.maxHp = 8 + Math.floor(Math.random()*6);
-    this.hp = this.maxHp;
-    this.colorHue = 20 + Math.random()*80;
-    this.spawnTick = 0;
-    this.damage = 2;
+    this.speed=40+Math.random()*20;
+    this.maxHp=8+Math.floor(Math.random()*6);
+    this.hp=this.maxHp;
+    this.colorHue=20+Math.random()*80;
+    this.damage=2;
   }
   updateAI(){
-    // simple chase if near
-    const p = player.center();
-    const e = this.center();
-    const dx = p.x - e.x, dy = p.y - e.y;
-    const dist = Math.hypot(dx,dy);
-    if (dist < 200){
-      // move towards player
-      this.vx = (dx / dist) * this.speed;
-      this.vy = (dy / dist) * this.speed;
-    } else {
-      // idle wander
-      this.vx *= 0.95;
-      this.vy *= 0.95;
+    const p=player.center(), e=this.center();
+    const dx=p.x-e.x, dy=p.y-e.y;
+    const dist=Math.hypot(dx,dy);
+    if(dist<200){
+      this.vx=(dx/dist)*this.speed;
+      this.vy=(dy/dist)*this.speed;
+    }else{
+      this.vx*=0.95; this.vy*=0.95;
     }
   }
 }
 
-let enemies = [];
+let enemies=[];
 
-/* Spawn some enemies at map floor positions */
 function spawnEnemies(count=6){
-  enemies = [];
-  let tries = 0;
-  while (enemies.length < count && tries < 500){
+  enemies=[];
+  let tries=0;
+  while(enemies.length<count&&tries<500){
     tries++;
-    const col = 2 + Math.floor(Math.random()*(MAP_COLS-4));
-    const row = 2 + Math.floor(Math.random()*(MAP_ROWS-4));
-    if (!isWallTile(col,row)){
-      const px = col*TILE + 6;
-      const py = row*TILE + 6;
-      // make sure not spawning too close to player
-      const dx = px - player.x, dy = py - player.y;
-      if (Math.hypot(dx,dy) < 120) continue;
+    const col=2+Math.floor(Math.random()*(MAP_COLS-4));
+    const row=2+Math.floor(Math.random()*(MAP_ROWS-4));
+    if(!isWallTile(col,row)){
+      const px=col*TILE+6;
+      const py=row*TILE+6;
+      const dx=px-player.x, dy=py-player.y;
+      if(Math.hypot(dx,dy)<120) continue;
       enemies.push(new Enemy(px,py));
     }
   }
 }
 
 /* ---------- Game state ---------- */
-let running = false;
-let lastTime = 0;
-let accumulator = 0;
-const TICK = 1000 / 60; // 60hz
+let running=false;
+let lastTime=0, lastDt=0;
 
 function startGame(){
-  // initialize player and enemies
-  player.x = TILE*2 + 4; player.y = TILE*2 + 4;
-  player.hp = 20; player.maxHp = 20; player.score = 0;
-  player.attackCooldown = 0; player.attackDuration = 0;
+  player.x=TILE*2+4;player.y=TILE*2+4;
+  player.hp=20;player.maxHp=20;player.score=0;
+  player.attackCooldown=0;player.attackDuration=0;
   spawnEnemies(8);
-  running = true;
-  startBtn.style.display = 'none';
-  restartBtn.style.display = 'none';
-  lastTime = performance.now();
+  running=true;
+  startBtn.style.display='none';
+  restartBtn.style.display='none';
+  lastTime=performance.now();
   requestAnimationFrame(loop);
 }
-
 function endGame(){
-  running = false;
-  restartBtn.style.display = 'inline-block';
-  startBtn.style.display = 'none';
+  running=false;
+  restartBtn.style.display='inline-block';
 }
 
-/* ---------- Input & Movement ---------- */
+/* ---------- Input ---------- */
 function handleInput(dt){
-  let mx = 0, my = 0;
-  if (keys['arrowleft'] || keys['a']) mx -= 1;
-  if (keys['arrowright'] || keys['d']) mx += 1;
-  if (keys['arrowup'] || keys['w']) my -= 1;
-  if (keys['arrowdown'] || keys['s']) my += 1;
+  let mx=0,my=0;
+  if(keys['arrowleft']||keys['a'])mx-=1;
+  if(keys['arrowright']||keys['d'])mx+=1;
+  if(keys['arrowup']||keys['w'])my-=1;
+  if(keys['arrowdown']||keys['s'])my+=1;
+  if(mx!==0&&my!==0){const f=Math.sqrt(2)/2;mx*=f;my*=f;}
 
-  // normalize diagonal
-  if (mx !== 0 && my !== 0){ const f = Math.sqrt(2)/2; mx *= f; my *= f; }
+  const speed=player.speed;
+  player.vx=mx*speed;
+  player.vy=my*speed;
 
-  // apply movement
-  const speed = player.speed;
-  player.vx = mx * speed;
-  player.vy = my * speed;
-
-  // facing
-  if (Math.abs(mx) > Math.abs(my)){
-    player.facing = mx > 0 ? 'right' : 'left';
-  } else if (Math.abs(my) > 0){
-    player.facing = my > 0 ? 'down' : 'up';
+  if(Math.abs(mx)>Math.abs(my)){
+    player.facing=mx>0?'right':'left';
+  }else if(Math.abs(my)>0){
+    player.facing=my>0?'down':'up';
   }
 
-  // Attack (space)
-  if ((keys[' '] || keys['space']) && player.attackCooldown <= 0 && player.attackDuration<=0){
-    player.attackDuration = 160; // ms
-    player.attackCooldown = 400; // ms until next attack
+  if((keys[' ']||keys['space'])&&player.attackCooldown<=0&&player.attackDuration<=0){
+    player.attackDuration=160;
+    player.attackCooldown=400;
   }
 }
 
-/* Move entity with collision resolution */
-function moveEntity(e, dt){
-  const nextX = e.x + e.vx * dt;
-  if (!collideWithMap(nextX, e.y, e.w, e.h)) {
-    e.x = nextX;
-  } else {
-    // slide on X only if possible
-    // noop if blocked
-  }
-  const nextY = e.y + e.vy * dt;
-  if (!collideWithMap(e.x, nextY, e.w, e.h)) {
-    e.y = nextY;
-  }
+function moveEntity(e,dt){
+  const nextX=e.x+e.vx*dt;
+  if(!collideWithMap(nextX,e.y,e.w,e.h))e.x=nextX;
+  const nextY=e.y+e.vy*dt;
+  if(!collideWithMap(e.x,nextY,e.w,e.h))e.y=nextY;
 }
 
 /* ---------- Combat ---------- */
 function doAttackHit(){
-  // create attack hitbox in front of player depending on facing
-  const pcenter = player.center();
-  let hx = pcenter.x, hy = pcenter.y, hw = 14, hh = 14;
-  const r = player.attackRange;
-  if (player.facing === 'up') hy -= r;
-  if (player.facing === 'down') hy += r;
-  if (player.facing === 'left') hx -= r;
-  if (player.facing === 'right') hx += r;
-  // simple rectangle hit test vs enemies
-  enemies.forEach(en => {
-    if (en.dead) return;
-    const box = {x: hx - hw/2, y: hy - hh/2, w: hw, h: hh};
-    if (!(box.x + box.w <= en.x || box.x >= en.x + en.w || box.y + box.h <= en.y || box.y >= en.y + en.h)){
-      en.hp -= player.attackDamage;
-      if (en.hp <= 0){ en.dead = true; player.score += 10; }
+  const p=player.center();
+  let hx=p.x,hy=p.y,hw=14,hh=14,r=player.attackRange;
+  if(player.facing==='up')hy-=r;
+  if(player.facing==='down')hy+=r;
+  if(player.facing==='left')hx-=r;
+  if(player.facing==='right')hx+=r;
+  const box={x:hx-hw/2,y:hy-hh/2,w:hw,h:hh};
+  enemies.forEach(en=>{
+    if(en.dead)return;
+    if(!(box.x+box.w<=en.x||box.x>=en.x+en.w||box.y+box.h<=en.y||box.y>=en.y+en.h)){
+      en.hp-=player.attackDamage;
+      if(en.hp<=0){en.dead=true;player.score+=10;}
     }
   });
 }
 
 /* ---------- Update ---------- */
 function update(dt){
-  if (!running) return;
-
-  // Input and movement
   handleInput(dt);
-  moveEntity(player, dt);
+  moveEntity(player,dt);
 
-  // Attack timers (ms)
-  if (player.attackCooldown > 0) player.attackCooldown -= dt*1000;
-  if (player.attackDuration > 0){
-    player.attackDuration -= dt*1000;
-    // on beginning of attack window, check hits (only once)
-    if (player.attackDuration > 0 && player.attackDuration < 160 - 20){ /* ensure not repeated */ }
-  }
-  // We'll trigger the hit once when attack begins: detect rising edge by a flag
-  if (!player._wasAttacking && player.attackDuration > 0){
-    doAttackHit();
-  }
-  player._wasAttacking = player.attackDuration > 0;
+  if(player.attackCooldown>0)player.attackCooldown-=dt*1000;
+  if(player.attackDuration>0)player.attackDuration-=dt*1000;
 
-  // Enemies update
-  enemies.forEach(en => {
-    if (en.dead) return;
+  if(!player._wasAttacking&&player.attackDuration>0){doAttackHit();}
+  player._wasAttacking=player.attackDuration>0;
+
+  enemies.forEach(en=>{
+    if(en.dead)return;
     en.updateAI();
-    moveEntity(en, dt);
-    // enemy-player collision
-    if (en.intersects(player)){
-      // simple cooldownless damage on contact (with small push)
-      if (!en._hitCooldown || en._hitCooldown <= 0){
-        player.hp -= en.damage;
-        en._hitCooldown = 600; // ms between hits from this enemy
-        // knockback
-        const dx = player.x - en.x, dy = player.y - en.y;
-        const len = Math.hypot(dx,dy) || 1;
-        player.x += (dx/len)*8;
-        player.y += (dy/len)*8;
+    moveEntity(en,dt);
+    if(en.intersects(player)){
+      if(!en._hitCooldown||en._hitCooldown<=0){
+        player.hp-=en.damage;
+        en._hitCooldown=600;
+        const dx=player.x-en.x,dy=player.y-en.y;
+        const len=Math.hypot(dx,dy)||1;
+        player.x+=(dx/len)*8;
+        player.y+=(dy/len)*8;
       }
     }
-    if (en._hitCooldown > 0) en._hitCooldown -= dt*1000;
-    if (en.hp <= 0) en.dead = true;
+    if(en._hitCooldown>0)en._hitCooldown-=dt*1000;
+    if(en.hp<=0)en.dead=true;
   });
 
-  // remove dead enemies after small delay and maybe spawn new waves
-  const alive = enemies.filter(e => !e.dead);
-  if (alive.length === 0){
-    // reward and spawn next wave
-    player.score += 50;
-    spawnEnemies(6 + Math.floor(Math.random()*6));
+  const alive=enemies.filter(e=>!e.dead);
+  if(alive.length===0){
+    player.score+=50;
+    spawnEnemies(6+Math.floor(Math.random()*6));
   }
 
-  // player death
-  if (player.hp <= 0){
-    endGame();
-  }
+  if(player.hp<=0)endGame();
 }
 
 /* ---------- Draw ---------- */
 function drawMap(){
-  for (let r=0;r<MAP_ROWS;r++){
-    for (let c=0;c<MAP_COLS;c++){
-      const tile = MAP[r][c];
-      const x = c*TILE, y = r*TILE;
-      if (tile === 1){
-        // wall
-        ctx.fillStyle = '#213444';
+  for(let r=0;r<MAP_ROWS;r++){
+    for(let c=0;c<MAP_COLS;c++){
+      const t=MAP[r][c];
+      const x=c*TILE,y=r*TILE;
+      if(t===1){
+        ctx.fillStyle='#213444';
         ctx.fillRect(x,y,TILE,TILE);
-        // wall detail
-        ctx.fillStyle = '#1a2b36';
+        ctx.fillStyle='#1a2b36';
         ctx.fillRect(x+2,y+2,TILE-4,6);
-      } else {
-        // floor
-        ctx.fillStyle = '#07131a';
+      }else{
+        ctx.fillStyle='#07131a';
         ctx.fillRect(x,y,TILE,TILE);
-        // subtle texture
-        ctx.fillStyle = 'rgba(255,255,255,0.02)';
+        ctx.fillStyle='rgba(255,255,255,0.02)';
         ctx.fillRect(x+8,y+20,6,2);
       }
     }
   }
 }
 
-let walkAnim = 0;
+let walkAnim=0;
 function drawEntity(ent){
-  // basic body
-  if (ent === player){
-    // player color and simple leg animation by oscillation
-    // scale animation by movement speed (player.vx/vy are px/s), dt is seconds
-    walkAnim += 0.02 * Math.hypot(player.vx, player.vy) * (lastDt || 0.016);
-    const legOffset = Math.sin(walkAnim)*2;
-    // body
-    ctx.fillStyle = '#bfe0ff';
-    ctx.fillRect(ent.x, ent.y, ent.w, ent.h);
-    // eyes
-    ctx.fillStyle = '#072';
-    ctx.fillRect(ent.x + ent.w/2 - 6, ent.y + 6, 3,3);
-    ctx.fillRect(ent.x + ent.w/2 + 3, ent.y + 6, 3,3);
-    // legs (animated)
-    ctx.fillStyle = '#7d98b1';
-    ctx.fillRect(ent.x + 4, ent.y + ent.h - 6 + legOffset, 6, 6);
-    ctx.fillRect(ent.x + ent.w - 10, ent.y + ent.h - 6 - legOffset, 6, 6);
-
-    // if attacking, draw a sword / slash
-    if (player.attackDuration > 0){
+  if(ent===player){
+    walkAnim+=0.0004*Math.hypot(player.vx,player.vy);
+    const legOffset=Math.sin(walkAnim*100)*2;
+    ctx.fillStyle='#bfe0ff';
+    ctx.fillRect(ent.x,ent.y,ent.w,ent.h);
+    ctx.fillStyle='#072';
+    ctx.fillRect(ent.x+ent.w/2-6,ent.y+6,3,3);
+    ctx.fillRect(ent.x+ent.w/2+3,ent.y+6,3,3);
+    ctx.fillStyle='#7d98b1';
+    ctx.fillRect(ent.x+4,ent.y+ent.h-6+legOffset,6,6);
+    ctx.fillRect(ent.x+ent.w-10,ent.y+ent.h-6-legOffset,6,6);
+    if(player.attackDuration>0){
       ctx.save();
-      ctx.translate(ent.x + ent.w/2, ent.y + ent.h/2);
-      let ang = 0;
-      if (player.facing === 'up') ang = -Math.PI/2;
-      if (player.facing === 'down') ang = Math.PI/2;
-      if (player.facing === 'left') ang = Math.PI;
-      if (player.facing === 'right') ang = 0;
+      ctx.translate(ent.x+ent.w/2,ent.y+ent.h/2);
+      let ang=0;
+      if(player.facing==='up')ang=-Math.PI/2;
+      if(player.facing==='down')ang=Math.PI/2;
+      if(player.facing==='left')ang=Math.PI;
+      if(player.facing==='right')ang=0;
       ctx.rotate(ang);
-      ctx.fillStyle = 'rgba(245,158,11,0.95)';
-      ctx.fillRect(12, -6, 18, 12);
-      // slash glow
-      ctx.fillStyle = 'rgba(245,158,11,0.25)';
-      ctx.fillRect(24, -14, 18, 28);
+      ctx.fillStyle='rgba(245,158,11,0.95)';
+      ctx.fillRect(12,-6,18,12);
+      ctx.fillStyle='rgba(245,158,11,0.25)';
+      ctx.fillRect(24,-14,18,28);
       ctx.restore();
     }
-  } else {
-    // enemy
-    const hue = ent.colorHue || 40;
-    ctx.fillStyle = `hsl(${hue} 55% 55%)`;
-    ctx.fillRect(ent.x, ent.y, ent.w, ent.h);
-    // eyes
-    ctx.fillStyle = '#071127';
-    ctx.fillRect(ent.x + ent.w/2 - 6, ent.y + 6, 3,3);
-    ctx.fillRect(ent.x + ent.w/2 + 3, ent.y + 6, 3,3);
-    // health bar
-    const hpRatio = Math.max(0, ent.hp / ent.maxHp);
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(ent.x, ent.y - 6, ent.w, 4);
-    ctx.fillStyle = `rgba(255,70,70,0.9)`;
-    ctx.fillRect(ent.x, ent.y - 6, ent.w * hpRatio, 4);
+  }else{
+    const hue=ent.colorHue||40;
+    ctx.fillStyle=`hsl(${hue} 55% 55%)`;
+    ctx.fillRect(ent.x,ent.y,ent.w,ent.h);
+    ctx.fillStyle='#071127';
+    ctx.fillRect(ent.x+ent.w/2-6,ent.y+6,3,3);
+    ctx.fillRect(ent.x+ent.w/2+3,ent.y+6,3,3);
+    const hpRatio=Math.max(0,ent.hp/ent.maxHp);
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillRect(ent.x,ent.y-6,ent.w,4);
+    ctx.fillStyle='rgba(255,70,70,0.9)';
+    ctx.fillRect(ent.x,ent.y-6,ent.w*hpRatio,4);
   }
 }
 
-/* Draw UI */
 function drawUI(){
-  const enemiesLeft = enemies.filter(e => !e.dead).length;
-  hud.innerHTML = `HP: <strong style="color:${player.hp>8?'#a3e635':'#fb7185'}">${Math.max(0,player.hp)}</strong> &nbsp; SCORE: <strong style="color:#f59e0b">${player.score}</strong> &nbsp; ENEMIES: <strong>${enemiesLeft}</strong>`;
+  const alive=enemies.filter(e=>!e.dead).length;
+  hud.innerHTML=`HP: <strong style="color:${player.hp>8?'#a3e635':'#fb7185'}">${Math.max(0,player.hp)}</strong> &nbsp; SCORE: <strong style="color:#f59e0b">${player.score}</strong> &nbsp; ENEMIES: <strong>${alive}</strong>`;
 }
 
-/* ---------- Game Loop ---------- */
+/* ---------- Loop ---------- */
 function loop(now){
-  const dt = Math.min(32, (now - lastTime)) / 1000; // seconds, clamp large frames
-  lastTime = now;
-
-  if (running){
-    update(dt);
-  }
-
-  // clear
+  const dt=Math.min(32,(now-lastTime))/1000;
+  lastTime=now; lastDt=dt;
+  if(running)update(dt);
   ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // draw
   drawMap();
-  // draw dead enemies faintly
-  enemies.forEach(e => {
-    if (e.dead){
-      ctx.globalAlpha = 0.25;
-      drawEntity(e);
-      ctx.globalAlpha = 1;
-    }
-  });
-  // draw alive enemies
-  enemies.forEach(e => { if (!e.dead) drawEntity(e); });
-  // player
+  enemies.forEach(e=>{if(e.dead){ctx.globalAlpha=0.25;drawEntity(e);ctx.globalAlpha=1;}});
+  enemies.forEach(e=>{if(!e.dead)drawEntity(e);});
   drawEntity(player);
-
-  // HUD
   drawUI();
-
-  // overlays when not running
-  if (!running){
-    ctx.fillStyle = 'rgba(2,6,13,0.65)';
+  if(!running){
+    ctx.fillStyle='rgba(2,6,13,0.65)';
     ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle = '#dbeafe';
-    ctx.font = '28px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('Mini Dungeon Crawler', canvas.width/2, canvas.height/2 - 20);
-    ctx.font = '16px system-ui';
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Press Start to enter the dungeon', canvas.width/2, canvas.height/2 + 6);
-    if (player.hp <= 0){
-      ctx.fillStyle = '#fb7185';
-      ctx.font = '18px system-ui';
-      ctx.fillText('Game Over — You died', canvas.width/2, canvas.height/2 + 40);
-      ctx.fillStyle = '#f59e0b';
-      ctx.font = '14px system-ui';
-      ctx.fillText(`Final Score: ${player.score}`, canvas.width/2, canvas.height/2 + 64);
+    ctx.fillStyle='#dbeafe';
+    ctx.font='28px system-ui';
+    ctx.textAlign='center';
+    ctx.fillText('Mini Dungeon Crawler',canvas.width/2,canvas.height/2-20);
+    ctx.font='16px system-ui';
+    ctx.fillStyle='#94a3b8';
+    ctx.fillText('Press Start to enter the dungeon',canvas.width/2,canvas.height/2+6);
+    if(player.hp<=0){
+      ctx.fillStyle='#fb7185';
+      ctx.font='18px system-ui';
+      ctx.fillText('Game Over — You died',canvas.width/2,canvas.height/2+40);
+      ctx.fillStyle='#f59e0b';
+      ctx.font='14px system-ui';
+      ctx.fillText(`Final Score: ${player.score}`,canvas.width/2,canvas.height/2+64);
     }
   }
-
   requestAnimationFrame(loop);
 }
 
-/* ---------- UI actions ---------- */
-startBtn.addEventListener('click', () => { startGame(); });
-restartBtn.addEventListener('click', () => { startGame(); });
+/* ---------- UI ---------- */
+startBtn.addEventListener('click',()=>startGame());
+restartBtn.addEventListener('click',()=>startGame());
 
-/* Kick initial render */
-lastTime = performance.now();
+lastTime=performance.now();
 requestAnimationFrame(loop);
-
 </script>
 </body>
 </html>
