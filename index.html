@@ -3,131 +3,66 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Mini Dungeon Crawler</title>
+<title>Dungeon Crawler with Progression</title>
 <style>
-  :root{
-    --bg:#0f1720;
-    --panel:#111827;
-    --accent:#f59e0b;
-    --muted:#94a3b8;
-  }
-  html,body{height:100%; margin:0; font-family:system-ui,Segoe UI,Roboto,Arial;}
-  body{
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    background:linear-gradient(180deg,var(--bg),#071027 120%);
-    color:#e6eef8;
-  }
-  #gameWrap{ width:900px; max-width:95vw; margin:24px; }
-  canvas{ display:block; width:100%; height:auto; background:#091018; border-radius:8px; box-shadow: 0 8px 30px rgba(2,6,23,.6);}
-  .ui {
-    margin-top:10px;
-    display:flex;
-    justify-content:space-between;
-    gap:12px;
-    align-items:center;
-  }
-  .panel{
-    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-    padding:8px 12px;border-radius:8px; color:var(--muted); font-size:14px;
-  }
-  .center{
-    text-align:center;color:#dbeafe;
-  }
-  button{
-    background:var(--accent); color:#071027; border:none; padding:8px 12px;border-radius:8px; cursor:pointer; font-weight:700;
-  }
-  .small{font-size:13px;}
-  .hint{color:var(--muted); font-size:12px;}
+  body {margin:0;font-family:system-ui;background:#071027;color:#e6eef8;display:flex;justify-content:center;align-items:center;height:100vh;}
+  canvas{background:#091018;border-radius:8px;}
+  #hud{margin-top:10px;color:#94a3b8;font-size:14px;}
+  button{background:#f59e0b;color:#071027;padding:6px 12px;border:none;border-radius:6px;margin-left:6px;cursor:pointer;}
 </style>
 </head>
 <body>
-  <div id="gameWrap">
-    <canvas id="c" width="720" height="480"></canvas>
-    <div class="ui">
-      <div class="panel" id="hud">HP: — &nbsp; SCORE: — &nbsp; ENEMIES: —</div>
-      <div class="panel small" id="controls">Move: WASD / Arrows &nbsp; Attack: Space</div>
-      <div>
-        <button id="startBtn">Start Game</button>
-        <button id="restartBtn" style="display:none">Restart</button>
-      </div>
-    </div>
-    <div class="center hint" style="margin-top:8px">Tip: attack while moving to hit more enemies. Walls block movement and attacks.</div>
-  </div>
+<div>
+  <canvas id="c" width="720" height="480"></canvas>
+  <div id="hud"></div>
+  <button id="startBtn">Start Game</button>
+  <button id="restartBtn" style="display:none">Restart</button>
+</div>
 
 <script>
-/* ---------------------------
-   Mini Dungeon Crawler (fixed movement)
-   Controls: WASD / Arrows to move, Space to attack.
---------------------------- */
-
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
 const TILE = 32;
 const MAP_COLS = 22;
 const MAP_ROWS = 14;
-canvas.width = TILE * MAP_COLS;
-canvas.height = TILE * MAP_ROWS;
+canvas.width = TILE*MAP_COLS;
+canvas.height = TILE*MAP_ROWS;
 
 const hud = document.getElementById('hud');
 const startBtn = document.getElementById('startBtn');
 const restartBtn = document.getElementById('restartBtn');
 
-let keys = {};
-window.addEventListener('keydown', e => {
-  keys[e.key.toLowerCase()] = true;
-  if (e.key === " ") e.preventDefault();
-});
-window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+let keys={};
+window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key===" ")e.preventDefault();});
+window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 
-/* ---------- Map Layout ---------- */
-const rawMap = [
-  "1111111111111111111111",
-  "1000000000000000000001",
-  "1011110111111011110101",
-  "1010000100000010000101",
-  "1010111101111010111101",
-  "1010000001000010000001",
-  "1010111111011110111101",
-  "1000100001000010000001",
-  "1011101111011110111101",
-  "1000001000000010000001",
-  "1011111011111011111101",
-  "1000000000000000000001",
-  "1000000000000000000001",
-  "1111111111111111111111",
+/* ---- Map ---- */
+const rawMap=[
+"1111111111111111111111",
+"1000000000000000000001",
+"1011110111111011110101",
+"1010000100000010000101",
+"1010111101111010111101",
+"1010000001000010000001",
+"1010111111011110111101",
+"1000100001000010000001",
+"1011101111011110111101",
+"1000001000000010000001",
+"1011111011111011111101",
+"1000000000000000000001",
+"1000000000000000000001",
+"1111111111111111111111",
 ];
-const MAP = rawMap.map(r => r.split('').map(Number));
+const MAP = rawMap.map(r=>r.split('').map(Number));
 
-function isWallTile(c,r){
-  if (r<0||c<0||r>=MAP_ROWS||c>=MAP_COLS) return true;
-  return MAP[r][c] === 1;
-}
-function collideWithMap(x,y,w,h){
-  const left = Math.floor(x / TILE);
-  const right = Math.floor((x + w - 1) / TILE);
-  const top = Math.floor(y / TILE);
-  const bottom = Math.floor((y + h - 1) / TILE);
-  return isWallTile(left,top)||isWallTile(right,top)||isWallTile(left,bottom)||isWallTile(right,bottom);
-}
+function isWallTile(c,r){return r<0||c<0||r>=MAP_ROWS||c>=MAP_COLS||MAP[r][c]===1;}
+function collideWithMap(x,y,w,h){const l=Math.floor(x),r=Math.floor(x+w-1),t=Math.floor(y),b=Math.floor(y+h-1);return isWallTile(l,t)||isWallTile(r,t)||isWallTile(l,b)||isWallTile(r,b);}
 
-/* ---------- Entities ---------- */
-class Entity{
-  constructor(x,y,w,h){
-    this.x=x;this.y=y;this.w=w;this.h=h;
-    this.vx=0;this.vy=0;
-    this.hp=10;this.maxHp=10;this.dead=false;
-  }
-  center(){return {x:this.x+this.w/2,y:this.y+this.h/2};}
-  intersects(o){
-    return !(this.x+this.w<=o.x||this.x>=o.x+o.w||this.y+this.h<=o.y||this.y>=o.y+o.h);
-  }
-}
-
-const player=new Entity(TILE*2+4,TILE*2+4,22,28);
-player.speed=120; // pixels/sec
+/* ---- Player & Enemies ---- */
+class Entity{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.vx=0;this.vy=0;this.hp=10;this.maxHp=10;this.dead=false;}center(){return {x:this.x+this.w/2,y:this.y+this.h/2};}intersects(o){return !(this.x+this.w<=o.x||this.x>=o.x+o.w||this.y+this.h<=o.y||this.y>=o.y+o.h);}}
+const player=new Entity(0,0,22,28);
+player.speed=120;
 player.facing='down';
 player.score=0;
 player.attackCooldown=0;
@@ -135,6 +70,30 @@ player.attackDuration=0;
 player.attackRange=28;
 player.attackDamage=6;
 
+/* --- Leveling / Progression --- */
+player.level=1;
+player.xp=0;
+player.xpToNext=50;
+player.statBonus={attack:0,maxHP:0,speed:0};
+
+function gainXP(amount){
+  player.xp+=amount;
+  if(player.xp>=player.xpToNext){
+    player.level++;
+    player.xp-=player.xpToNext;
+    player.xpToNext=Math.floor(player.xpToNext*1.5);
+    // Player gets stronger
+    player.statBonus.attack+=2;
+    player.statBonus.maxHP+=8;
+    player.statBonus.speed+=5;
+    player.attackDamage=6+player.statBonus.attack;
+    player.maxHp=20+player.statBonus.maxHP;
+    player.hp=player.maxHp;
+    player.speed=120+player.statBonus.speed;
+  }
+}
+
+/* ---- Enemy ---- */
 class Enemy extends Entity{
   constructor(x,y){
     super(x,y,20,24);
@@ -148,55 +107,33 @@ class Enemy extends Entity{
     const p=player.center(), e=this.center();
     const dx=p.x-e.x, dy=p.y-e.y;
     const dist=Math.hypot(dx,dy);
-    if(dist<200){
-      this.vx=(dx/dist)*this.speed;
-      this.vy=(dy/dist)*this.speed;
-    }else{
-      this.vx*=0.95; this.vy*=0.95;
-    }
+    if(dist<200){this.vx=(dx/dist)*this.speed; this.vy=(dy/dist)*this.speed;}
+    else {this.vx*=0.95; this.vy*=0.95;}
   }
 }
 
 let enemies=[];
 
-function spawnEnemies(count=6){
-  enemies=[];
-  let tries=0;
-  while(enemies.length<count&&tries<500){
-    tries++;
-    const col=2+Math.floor(Math.random()*(MAP_COLS-4));
-    const row=2+Math.floor(Math.random()*(MAP_ROWS-4));
-    if(!isWallTile(col,row)){
-      const px=col*TILE+6;
-      const py=row*TILE+6;
-      const dx=px-player.x, dy=py-player.y;
-      if(Math.hypot(dx,dy)<120) continue;
-      enemies.push(new Enemy(px,py));
-    }
-  }
+/* ---- Spawn Open Tile ---- */
+function findOpenTile(){
+  let x,y;
+  do{
+    x=Math.floor(Math.random()*MAP_COLS);
+    y=Math.floor(Math.random()*MAP_ROWS);
+  }while(isWallTile(x,y));
+  return {x,y};
 }
 
-/* ---------- Game state ---------- */
-let running=false;
-let lastTime=0, lastDt=0;
+function spawnPlayer(){const t=findOpenTile();player.x=t.x*TILE+4;player.y=t.y*TILE+4;}
+function spawnEnemies(count=6){enemies=[];let tries=0;while(enemies.length<count&&tries<500){tries++;const t=findOpenTile();const px=t.x*TILE+6;const py=t.y*TILE+6;if(Math.hypot(px-player.x,py-player.y)<80)continue;enemies.push(new Enemy(px,py));}}
 
-function startGame(){
-  player.x=TILE*2+4;player.y=TILE*2+4;
-  player.hp=20;player.maxHp=20;player.score=0;
-  player.attackCooldown=0;player.attackDuration=0;
-  spawnEnemies(8);
-  running=true;
-  startBtn.style.display='none';
-  restartBtn.style.display='none';
-  lastTime=performance.now();
-  requestAnimationFrame(loop);
-}
-function endGame(){
-  running=false;
-  restartBtn.style.display='inline-block';
-}
+/* ---- Game State ---- */
+let running=false,lastTime=0,lastDt=0,floor=1;
 
-/* ---------- Input ---------- */
+function startGame(){spawnPlayer();spawnEnemies(8);player.hp=20;player.maxHp=20;player.score=0;player.attackCooldown=0;player.attackDuration=0;running=true;startBtn.style.display='none';restartBtn.style.display='none';lastTime=performance.now();requestAnimationFrame(loop);}
+function endGame(){running=false;restartBtn.style.display='inline-block';}
+
+/* ---- Input ---- */
 function handleInput(dt){
   let mx=0,my=0;
   if(keys['arrowleft']||keys['a'])mx-=1;
@@ -204,31 +141,22 @@ function handleInput(dt){
   if(keys['arrowup']||keys['w'])my-=1;
   if(keys['arrowdown']||keys['s'])my+=1;
   if(mx!==0&&my!==0){const f=Math.sqrt(2)/2;mx*=f;my*=f;}
-
   const speed=player.speed;
   player.vx=mx*speed;
   player.vy=my*speed;
-
-  if(Math.abs(mx)>Math.abs(my)){
-    player.facing=mx>0?'right':'left';
-  }else if(Math.abs(my)>0){
-    player.facing=my>0?'down':'up';
-  }
-
-  if((keys[' ']||keys['space'])&&player.attackCooldown<=0&&player.attackDuration<=0){
-    player.attackDuration=160;
-    player.attackCooldown=400;
-  }
+  if(Math.abs(mx)>Math.abs(my))player.facing=mx>0?'right':'left';
+  else if(Math.abs(my)>0)player.facing=my>0?'down':'up';
+  if((keys[' ']||keys['space'])&&player.attackCooldown<=0&&player.attackDuration<=0){player.attackDuration=160;player.attackCooldown=400;}
 }
 
 function moveEntity(e,dt){
-  const nextX=e.x+e.vx*dt;
-  if(!collideWithMap(nextX,e.y,e.w,e.h))e.x=nextX;
-  const nextY=e.y+e.vy*dt;
-  if(!collideWithMap(e.x,nextY,e.w,e.h))e.y=nextY;
+  const nx=e.x+e.vx*dt;
+  if(!collideWithMap(nx,e.y,e.w,e.h))e.x=nx;
+  const ny=e.y+e.vy*dt;
+  if(!collideWithMap(e.x,ny,e.w,e.h))e.y=ny;
 }
 
-/* ---------- Combat ---------- */
+/* ---- Combat ---- */
 function doAttackHit(){
   const p=player.center();
   let hx=p.x,hy=p.y,hw=14,hh=14,r=player.attackRange;
@@ -241,20 +169,18 @@ function doAttackHit(){
     if(en.dead)return;
     if(!(box.x+box.w<=en.x||box.x>=en.x+en.w||box.y+box.h<=en.y||box.y>=en.y+en.h)){
       en.hp-=player.attackDamage;
-      if(en.hp<=0){en.dead=true;player.score+=10;}
+      if(en.hp<=0){en.dead=true;player.score+=10;gainXP(20);}
     }
   });
 }
 
-/* ---------- Update ---------- */
+/* ---- Update ---- */
 function update(dt){
   handleInput(dt);
   moveEntity(player,dt);
-
   if(player.attackCooldown>0)player.attackCooldown-=dt*1000;
   if(player.attackDuration>0)player.attackDuration-=dt*1000;
-
-  if(!player._wasAttacking&&player.attackDuration>0){doAttackHit();}
+  if(!player._wasAttacking&&player.attackDuration>0)doAttackHit();
   player._wasAttacking=player.attackDuration>0;
 
   enemies.forEach(en=>{
@@ -265,10 +191,8 @@ function update(dt){
       if(!en._hitCooldown||en._hitCooldown<=0){
         player.hp-=en.damage;
         en._hitCooldown=600;
-        const dx=player.x-en.x,dy=player.y-en.y;
-        const len=Math.hypot(dx,dy)||1;
-        player.x+=(dx/len)*8;
-        player.y+=(dy/len)*8;
+        const dx=player.x-en.x,dy=player.y-en.y,len=Math.hypot(dx,dy)||1;
+        player.x+=(dx/len)*8; player.y+=(dy/len)*8;
       }
     }
     if(en._hitCooldown>0)en._hitCooldown-=dt*1000;
@@ -276,117 +200,34 @@ function update(dt){
   });
 
   const alive=enemies.filter(e=>!e.dead);
-  if(alive.length===0){
-    player.score+=50;
-    spawnEnemies(6+Math.floor(Math.random()*6));
-  }
-
+  if(alive.length===0){player.score+=50;floor++;spawnEnemies(6+Math.floor(Math.random()*6));}
   if(player.hp<=0)endGame();
 }
 
-/* ---------- Draw ---------- */
-function drawMap(){
-  for(let r=0;r<MAP_ROWS;r++){
-    for(let c=0;c<MAP_COLS;c++){
-      const t=MAP[r][c];
-      const x=c*TILE,y=r*TILE;
-      if(t===1){
-        ctx.fillStyle='#213444';
-        ctx.fillRect(x,y,TILE,TILE);
-        ctx.fillStyle='#1a2b36';
-        ctx.fillRect(x+2,y+2,TILE-4,6);
-      }else{
-        ctx.fillStyle='#07131a';
-        ctx.fillRect(x,y,TILE,TILE);
-        ctx.fillStyle='rgba(255,255,255,0.02)';
-        ctx.fillRect(x+8,y+20,6,2);
-      }
-    }
-  }
-}
-
+/* ---- Draw ---- */
+function drawMap(){for(let r=0;r<MAP_ROWS;r++){for(let c=0;c<MAP_COLS;c++){const t=MAP[r][c],x=c*TILE,y=r*TILE;if(t===1){ctx.fillStyle='#213444';ctx.fillRect(x,y,TILE,TILE);}else{ctx.fillStyle='#07131a';ctx.fillRect(x,y,TILE,TILE);}}}}
 let walkAnim=0;
 function drawEntity(ent){
-  if(ent===player){
-    walkAnim+=0.0004*Math.hypot(player.vx,player.vy);
-    const legOffset=Math.sin(walkAnim*100)*2;
-    ctx.fillStyle='#bfe0ff';
-    ctx.fillRect(ent.x,ent.y,ent.w,ent.h);
-    ctx.fillStyle='#072';
-    ctx.fillRect(ent.x+ent.w/2-6,ent.y+6,3,3);
-    ctx.fillRect(ent.x+ent.w/2+3,ent.y+6,3,3);
-    ctx.fillStyle='#7d98b1';
-    ctx.fillRect(ent.x+4,ent.y+ent.h-6+legOffset,6,6);
-    ctx.fillRect(ent.x+ent.w-10,ent.y+ent.h-6-legOffset,6,6);
-    if(player.attackDuration>0){
-      ctx.save();
-      ctx.translate(ent.x+ent.w/2,ent.y+ent.h/2);
-      let ang=0;
-      if(player.facing==='up')ang=-Math.PI/2;
-      if(player.facing==='down')ang=Math.PI/2;
-      if(player.facing==='left')ang=Math.PI;
-      if(player.facing==='right')ang=0;
-      ctx.rotate(ang);
-      ctx.fillStyle='rgba(245,158,11,0.95)';
-      ctx.fillRect(12,-6,18,12);
-      ctx.fillStyle='rgba(245,158,11,0.25)';
-      ctx.fillRect(24,-14,18,28);
-      ctx.restore();
-    }
-  }else{
-    const hue=ent.colorHue||40;
-    ctx.fillStyle=`hsl(${hue} 55% 55%)`;
-    ctx.fillRect(ent.x,ent.y,ent.w,ent.h);
-    ctx.fillStyle='#071127';
-    ctx.fillRect(ent.x+ent.w/2-6,ent.y+6,3,3);
-    ctx.fillRect(ent.x+ent.w/2+3,ent.y+6,3,3);
-    const hpRatio=Math.max(0,ent.hp/ent.maxHp);
-    ctx.fillStyle='rgba(0,0,0,0.5)';
-    ctx.fillRect(ent.x,ent.y-6,ent.w,4);
-    ctx.fillStyle='rgba(255,70,70,0.9)';
-    ctx.fillRect(ent.x,ent.y-6,ent.w*hpRatio,4);
-  }
+  if(ent===player){walkAnim+=0.0004*Math.hypot(player.vx,player.vy);ctx.fillStyle='#bfe0ff';ctx.fillRect(ent.x,ent.y,ent.w,ent.h);}
+  else{const hue=ent.colorHue||40;ctx.fillStyle=`hsl(${hue} 55% 55%)`;ctx.fillRect(ent.x,ent.y,ent.w,ent.h);}
 }
+function drawUI(){ctx.fillStyle='white';ctx.font='16px monospace';ctx.textAlign='left';ctx.fillText(`HP:${player.hp}/${player.maxHp}  Lvl:${player.level}  XP:${player.xp}/${player.xpToNext}  Floor:${floor}  Score:${player.score}`,10,20);}
 
-function drawUI(){
-  const alive=enemies.filter(e=>!e.dead).length;
-  hud.innerHTML=`HP: <strong style="color:${player.hp>8?'#a3e635':'#fb7185'}">${Math.max(0,player.hp)}</strong> &nbsp; SCORE: <strong style="color:#f59e0b">${player.score}</strong> &nbsp; ENEMIES: <strong>${alive}</strong>`;
-}
-
-/* ---------- Loop ---------- */
+/* ---- Loop ---- */
 function loop(now){
   const dt=Math.min(32,(now-lastTime))/1000;
-  lastTime=now; lastDt=dt;
+  lastTime=now;lastDt=dt;
   if(running)update(dt);
   ctx.clearRect(0,0,canvas.width,canvas.height);
   drawMap();
-  enemies.forEach(e=>{if(e.dead){ctx.globalAlpha=0.25;drawEntity(e);ctx.globalAlpha=1;}});
   enemies.forEach(e=>{if(!e.dead)drawEntity(e);});
   drawEntity(player);
   drawUI();
-  if(!running){
-    ctx.fillStyle='rgba(2,6,13,0.65)';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#dbeafe';
-    ctx.font='28px system-ui';
-    ctx.textAlign='center';
-    ctx.fillText('Mini Dungeon Crawler',canvas.width/2,canvas.height/2-20);
-    ctx.font='16px system-ui';
-    ctx.fillStyle='#94a3b8';
-    ctx.fillText('Press Start to enter the dungeon',canvas.width/2,canvas.height/2+6);
-    if(player.hp<=0){
-      ctx.fillStyle='#fb7185';
-      ctx.font='18px system-ui';
-      ctx.fillText('Game Over — You died',canvas.width/2,canvas.height/2+40);
-      ctx.fillStyle='#f59e0b';
-      ctx.font='14px system-ui';
-      ctx.fillText(`Final Score: ${player.score}`,canvas.width/2,canvas.height/2+64);
-    }
-  }
+  if(!running){ctx.fillStyle='rgba(2,6,13,0.65)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#dbeafe';ctx.font='28px monospace';ctx.textAlign='center';ctx.fillText('Dungeon Crawler',canvas.width/2,canvas.height/2-20);ctx.font='16px monospace';ctx.fillStyle='#94a3b8';ctx.fillText('Press Start to enter the dungeon',canvas.width/2,canvas.height/2+6);if(player.hp<=0){ctx.fillStyle='#fb7185';ctx.fillText('Game Over — You died',canvas.width/2,canvas.height/2+40);ctx.fillStyle='#f59e0b';ctx.font='14px monospace';ctx.fillText(`Final Score: ${player.score}`,canvas.width/2,canvas.height/2+64);}}
   requestAnimationFrame(loop);
 }
 
-/* ---------- UI ---------- */
+/* ---- UI ---- */
 startBtn.addEventListener('click',()=>startGame());
 restartBtn.addEventListener('click',()=>startGame());
 
