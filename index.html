@@ -1,257 +1,275 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Dungeon Crawler with Level-Up Choices</title>
-<style>
-  body {margin:0;font-family:system-ui;background:#071027;color:#e6eef8;display:flex;justify-content:center;align-items:center;height:100vh;}
-  canvas{background:#091018;border-radius:8px;}
-  #hud{margin-top:10px;color:#94a3b8;font-size:14px;}
-  #levelUpMenu{display:none;text-align:center;margin-top:8px;}
-  #levelUpMenu button{background:#f59e0b;color:#071027;padding:6px 12px;border:none;border-radius:6px;margin:4px;cursor:pointer;}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Dungeon Crawler</title>
+    <style>
+        :root {
+            --bg: #0f1720;
+            --panel: #111827;
+            --accent: #f59e0b;
+            --muted: #94a3b8;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(180deg, var(--bg), #071027 120%);
+            color: #e6eef8;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #gameWrap {
+            width: 900px;
+            max-width: 95vw;
+            margin: 24px;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: #091018;
+            border-radius: 8px;
+            box-shadow: 0 8px 30px rgba(2,6,23,.6);
+        }
+        .ui {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+        }
+        .panel {
+            background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+        .center {
+            text-align: center;
+            color: #dbeafe;
+        }
+        button {
+            background: var(--accent);
+            color: #071027;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        .small { font-size: 13px; }
+        .hint { color: var(--muted); font-size: 12px; }
+        .level-up {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(2,6,13,0.95);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            z-index: 100;
+        }
+        .level-up button {
+            margin: 5px;
+            padding: 10px 15px;
+        }
+        .loot {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(2,6,13,0.95);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            z-index: 100;
+        }
+    </style>
 </head>
 <body>
-<div>
-  <canvas id="c" width="720" height="480"></canvas>
-  <div id="hud"></div>
-  <div id="levelUpMenu">
-    <p>Level Up! Choose a bonus:</p>
-    <button id="lvlAtk">Attack +2</button>
-    <button id="lvlHP">Max HP +10</button>
-    <button id="lvlSpd">Speed +10</button>
-  </div>
-  <button id="startBtn">Start Game</button>
-  <button id="restartBtn" style="display:none">Restart</button>
-</div>
+    <div id="gameWrap">
+        <canvas id="c" width="720" height="480"></canvas>
+        <div class="ui">
+            <div class="panel" id="hud">
+                HP: <strong id="hp">20</strong> &nbsp; 
+                XP: <strong id="xp">0</strong>/<strong id="xpMax">100</strong> &nbsp; 
+                LEVEL: <strong id="level">1</strong> &nbsp; 
+                SCORE: <strong id="score">0</strong>
+            </div>
+            <div class="panel small" id="controls">
+                Move: WASD / Arrows &nbsp; Attack: Space &nbsp; Save: S
+            </div>
+        </div>
+        <div class="center hint">
+            Tip: Attack while moving to hit more enemies. Walls block movement and attacks.
+        </div>
+    </div>
 
-<script>
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-const hud = document.getElementById('hud');
-const startBtn = document.getElementById('startBtn');
-const restartBtn = document.getElementById('restartBtn');
-const levelUpMenu = document.getElementById('levelUpMenu');
-const btnAtk = document.getElementById('lvlAtk');
-const btnHP  = document.getElementById('lvlHP');
-const btnSpd = document.getElementById('lvlSpd');
+    <script>
+        // Game constants
+        const TILE = 32;
+        const MAP_COLS = 22;
+        const MAP_ROWS = 14;
+        const SAVE_KEY = 'dungeonCrawlerSave';
 
-const TILE = 32;
-const MAP_COLS = 22;
-const MAP_ROWS = 14;
-canvas.width = TILE*MAP_COLS;
-canvas.height = TILE*MAP_ROWS;
+        // Canvas setup
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        canvas.width = TILE * MAP_COLS;
+        canvas.height = TILE * MAP_ROWS;
 
-let keys={};
-window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key===" ")e.preventDefault();});
-window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+        // Game state
+        let running = false;
+        let lastTime = 0;
+        let accumulator = 0;
+        const TICK = 1000 / 60;
 
-/* ---- Map ---- */
-const rawMap=[
-"1111111111111111111111",
-"1000000000000000000001",
-"1011110111111011110101",
-"1010000100000010000101",
-"1010111101111010111101",
-"1010000001000010000001",
-"1010111111011110111101",
-"1000100001000010000001",
-"1011101111011110111101",
-"1000001000000010000001",
-"1011111011111011111101",
-"1000000000000000000001",
-"1000000000000000000001",
-"1111111111111111111111",
-];
-const MAP = rawMap.map(r=>r.split('').map(Number));
-function isWallTile(c,r){return r<0||c<0||r>=MAP_ROWS||c>=MAP_COLS||MAP[r][c]===1;}
-function collideWithMap(x,y,w,h){const l=Math.floor(x),r=Math.floor(x+w-1),t=Math.floor(y),b=Math.floor(y+h-1);return isWallTile(l,t)||isWallTile(r,t)||isWallTile(l,b)||isWallTile(r,b);}
+        // Player class with RPG elements
+        class Player extends Entity {
+            constructor(x, y) {
+                super(x, y, 22, 28);
+                this.level = 1;
+                this.xp = 0;
+                this.xpToNextLevel = 100;
+                this.stats = {
+                    strength: 10,
+                    agility: 10,
+                    intelligence: 10
+                };
+                this.score = 0;
+                this.highScore = localStorage.getItem(SAVE_KEY) ? 
+                    JSON.parse(localStorage.getItem(SAVE_KEY)).highScore : 0;
+            }
 
-/* ---- Player & Enemies ---- */
-class Entity{constructor(x,y,w,h){this.x=x;this.y=y;this.w=w;this.h=h;this.vx=0;this.vy=0;this.hp=10;this.maxHp=10;this.dead=false;}center(){return {x:this.x+this.w/2,y:this.y+this.h/2};}intersects(o){return !(this.x+this.w<=o.x||this.x>=o.x+o.w||this.y+this.h<=o.y||this.y>=o.y+o.h);}}
-const player=new Entity(0,0,22,28);
-player.speed=120;
-player.facing='down';
-player.score=0;
-player.attackCooldown=0;
-player.attackDuration=0;
-player.attackRange=28;
-player.attackDamage=6;
+            gainXP(amount) {
+                this.xp += amount;
+                if (this.xp >= this.xpToNextLevel) {
+                    this.levelUp();
+                }
+            }
 
-/* --- Leveling / Progression --- */
-player.level=1;
-player.xp=0;
-player.xpToNext=50;
-player.statBonus={attack:0,maxHP:0,speed:0};
-player.levelingUp=false;
+            levelUp() {
+                this.level++;
+                this.xp -= this.xpToNextLevel;
+                this.xpToNextLevel = Math.floor(this.xpToNextLevel * 1.5);
+                this.showLevelUpMenu();
+            }
 
-function gainXP(amount){
-  player.xp+=amount;
-  if(player.xp>=player.xpToNext && !player.levelingUp){
-    player.levelingUp=true;
-    player.xp-=player.xpToNext;
-    player.level++;
-    player.xpToNext=Math.floor(player.xpToNext*1.5);
-    showLevelUpMenu();
-  }
-}
+            showLevelUpMenu() {
+                const menu = document.createElement('div');
+                menu.className = 'level-up';
+                menu.innerHTML = `
+                    <h3>Level Up! (Level ${this.level})</h3>
+                    <p>Choose a stat to increase:</p>
+                    <button onclick="game.player.increaseStat('strength')">+Strength</button>
+                    <button onclick="game.player.increaseStat('agility')">+Agility</button>
+                    <button onclick="game.player.increaseStat('intelligence')">+Intelligence</button>
+                `;
+                document.body.appendChild(menu);
+            }
 
-/* ---- Enemy ---- */
-class Enemy extends Entity{
-  constructor(x,y){
-    super(x,y,20,24);
-    this.speed=40+Math.random()*20;
-    this.maxHp=8+Math.floor(Math.random()*6);
-    this.hp=this.maxHp;
-    this.colorHue=20+Math.random()*80;
-    this.damage=2;
-  }
-  updateAI(){
-    const p=player.center(), e=this.center();
-    const dx=p.x-e.x, dy=p.y-e.y;
-    const dist=Math.hypot(dx,dy);
-    if(dist<200){this.vx=(dx/dist)*this.speed; this.vy=(dy/dist)*this.speed;}
-    else {this.vx*=0.95; this.vy*=0.95;}
-  }
-}
-let enemies=[];
+            increaseStat(stat) {
+                this.stats[stat]++;
+                const menu = document.querySelector('.level-up');
+                if (menu) menu.remove();
+            }
 
-/* ---- Spawn Open Tile ---- */
-function findOpenTile(){
-  let x,y;
-  do{ x=Math.floor(Math.random()*MAP_COLS); y=Math.floor(Math.random()*MAP_ROWS);}while(isWallTile(x,y));
-  return {x,y};
-}
-function spawnPlayer(){const t=findOpenTile();player.x=t.x*TILE+4;player.y=t.y*TILE+4;}
-function spawnEnemies(count=6){enemies=[];let tries=0;while(enemies.length<count&&tries<500){tries++;const t=findOpenTile();const px=t.x*TILE+6;const py=t.y*TILE+6;if(Math.hypot(px-player.x,py-player.y)<80)continue;enemies.push(new Enemy(px,py));}}
+            saveProgress() {
+                const saveData = {
+                    highScore: Math.max(this.score, this.highScore),
+                    level: this.level,
+                    xp: this.xp,
+                    stats: this.stats
+                };
+                localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+            }
+        }
 
-/* ---- Game State ---- */
-let running=false,lastTime=0,lastDt=0,floor=1;
+        // Enemy class with loot drops
+        class Enemy extends Entity {
+            constructor(x, y) {
+                super(x, y, 20, 24);
+                this.maxHp = 8 + Math.floor(Math.random() * 6);
+                this.hp = this.maxHp;
+                this.lootTable = {
+                    weapon: { chance: 0.3, min: 1, max: 3 },
+                    armor: { chance: 0.2, min: 1, max: 2 },
+                    potion: { chance: 0.4, min: 1, max: 2 }
+                };
+            }
 
-function startGame(){spawnPlayer();spawnEnemies(8);player.hp=20;player.maxHp=20;player.score=0;player.attackCooldown=0;player.attackDuration=0;running=true;startBtn.style.display='none';restartBtn.style.display='none';lastTime=performance.now();requestAnimationFrame(loop);}
-function endGame(){running=false;restartBtn.style.display='inline-block';}
+            dropLoot() {
+                const loot = [];
+                for (const [type, data] of Object.entries(this.lootTable)) {
+                    if (Math.random() < data.chance) {
+                        const amount = Math.floor(Math.random() * (data.max - data.min + 1)) + data.min;
+                        loot.push({ type, amount });
+                    }
+                }
+                return loot;
+            }
+        }
 
-/* ---- Input ---- */
-function handleInput(dt){
-  if(player.levelingUp)return;
-  let mx=0,my=0;
-  if(keys['arrowleft']||keys['a'])mx-=1;
-  if(keys['arrowright']||keys['d'])mx+=1;
-  if(keys['arrowup']||keys['w'])my-=1;
-  if(keys['arrowdown']||keys['s'])my+=1;
-  if(mx!==0&&my!==0){const f=Math.sqrt(2)/2;mx*=f;my*=f;}
-  const speed=player.speed;
-  player.vx=mx*speed;
-  player.vy=my*speed;
-  if(Math.abs(mx)>Math.abs(my))player.facing=mx>0?'right':'left';
-  else if(Math.abs(my)>0)player.facing=my>0?'down':'up';
-  if((keys[' ']||keys['space'])&&player.attackCooldown<=0&&player.attackDuration<=0){player.attackDuration=160;player.attackCooldown=400;}
-}
+        // Game instance
+        const game = {
+            player: new Player(TILE*2 + 4, TILE*2 + 4),
+            enemies: [],
+            items: [],
+            loadSave() {
+                const saveData = localStorage.getItem(SAVE_KEY);
+                if (saveData) {
+                    const data = JSON.parse(saveData);
+                    this.player.highScore = data.highScore;
+                    this.player.level = data.level;
+                    this.player.xp = data.xp;
+                    this.player.stats = data.stats;
+                }
+            },
+            save() {
+                this.player.saveProgress();
+            }
+        };
 
-function moveEntity(e,dt){
-  const nx=e.x+e.vx*dt;
-  if(!collideWithMap(nx,e.y,e.w,e.h))e.x=nx;
-  const ny=e.y+e.vy*dt;
-  if(!collideWithMap(e.x,ny,e.w,e.h))e.y=ny;
-}
+        // Input handling
+        let keys = {};
+        window.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key === ' ') e.preventDefault();
+            if (e.key === 's') game.save();
+        });
+        window.addEventListener('keyup', e => {
+            keys[e.key.toLowerCase()] = false;
+        });
 
-/* ---- Combat ---- */
-function doAttackHit(){
-  const p=player.center();
-  let hx=p.x,hy=p.y,hw=14,hh=14,r=player.attackRange;
-  if(player.facing==='up')hy-=r;
-  if(player.facing==='down')hy+=r;
-  if(player.facing==='left')hx-=r;
-  if(player.facing==='right')hx+=r;
-  const box={x:hx-hw/2,y:hy-hh/2,w:hw,h:hh};
-  enemies.forEach(en=>{
-    if(en.dead)return;
-    if(!(box.x+box.w<=en.x||box.x>=en.x+en.w||box.y+box.h<=en.y||box.y>=en.y+en.h)){
-      en.hp-=player.attackDamage;
-      if(en.hp<=0){en.dead=true;player.score+=10;gainXP(20);}
-    }
-  });
-}
+        // Game loop
+        function loop(now) {
+            const dt = Math.min(32, (now - lastTime)) / 1000;
+            lastTime = now;
 
-/* ---- Update ---- */
-function update(dt){
-  if(player.levelingUp)return;
-  handleInput(dt);
-  moveEntity(player,dt);
-  if(player.attackCooldown>0)player.attackCooldown-=dt*1000;
-  if(player.attackDuration>0)player.attackDuration-=dt*1000;
-  if(!player._wasAttacking&&player.attackDuration>0)doAttackHit();
-  player._wasAttacking=player.attackDuration>0;
+            if (running) {
+                update(dt);
+            }
 
-  enemies.forEach(en=>{
-    if(en.dead)return;
-    en.updateAI();
-    moveEntity(en,dt);
-    if(en.intersects(player)){
-      if(!en._hitCooldown||en._hitCooldown<=0){
-        player.hp-=en.damage;
-        en._hitCooldown=600;
-        const dx=player.x-en.x,dy=player.y-en.y,len=Math.hypot(dx,dy)||1;
-        player.x+=(dx/len)*8; player.y+=(dy/len)*8;
-      }
-    }
-    if(en._hitCooldown>0)en._hitCooldown-=dt*1000;
-    if(en.hp<=0)en.dead=true;
-  });
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const alive=enemies.filter(e=>!e.dead);
-  if(alive.length===0){player.score+=50;floor++;spawnEnemies(6+Math.floor(Math.random()*6));}
-  if(player.hp<=0)endGame();
-}
+            // Draw game
+            drawMap();
+            drawEntities();
+            drawUI();
 
-/* ---- Draw ---- */
-function drawMap(){for(let r=0;r<MAP_ROWS;r++){for(let c=0;c<MAP_COLS;c++){const t=MAP[r][c],x=c*TILE,y=r*TILE;if(t===1){ctx.fillStyle='#213444';ctx.fillRect(x,y,TILE,TILE);}else{ctx.fillStyle='#07131a';ctx.fillRect(x,y,TILE,TILE);}}}}
-let walkAnim=0;
-function drawEntity(ent){
-  if(ent===player){walkAnim+=0.0004*Math.hypot(player.vx,player.vy);ctx.fillStyle='#bfe0ff';ctx.fillRect(ent.x,ent.y,ent.w,ent.h);}
-  else{const hue=ent.colorHue||40;ctx.fillStyle=`hsl(${hue} 55% 55%)`;ctx.fillRect(ent.x,ent.y,ent.w,ent.h);}
-}
-function drawUI(){ctx.fillStyle='white';ctx.font='16px monospace';ctx.textAlign='left';ctx.fillText(`HP:${player.hp}/${player.maxHp}  Lvl:${player.level}  XP:${player.xp}/${player.xpToNext}  Floor:${floor}  Score:${player.score}`,10,20);}
+            requestAnimationFrame(loop);
+        }
 
-/* ---- Loop ---- */
-function loop(now){
-  const dt=Math.min(32,(now-lastTime))/1000;
-  lastTime=now;lastDt=dt;
-  if(running && !player.levelingUp)update(dt);
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawMap();
-  enemies.forEach(e=>{if(!e.dead)drawEntity(e);});
-  drawEntity(player);
-  drawUI();
-  if(!running){ctx.fillStyle='rgba(2,6,13,0.65)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#dbeafe';ctx.font='28px monospace';ctx.textAlign='center';ctx.fillText('Dungeon Crawler',canvas.width/2,canvas.height/2-20);ctx.font='16px monospace';ctx.fillStyle='#94a3b8';ctx.fillText('Press Start to enter the dungeon',canvas.width/2,canvas.height/2+6);if(player.hp<=0){ctx.fillStyle='#fb7185';ctx.fillText('Game Over — You died',canvas.width/2,canvas.height/2+40);ctx.fillStyle='#f59e0b';ctx.font='14px monospace';ctx.fillText(`Final Score: ${player.score}`,canvas.width/2,canvas.height/2+64);}}
-  requestAnimationFrame(loop);
-}
-
-/* ---- Level Up Buttons ---- */
-btnAtk.onclick = () => { player.attackDamage += 2; closeLevelUpMenu(); }
-btnHP.onclick  = () => { player.maxHp += 10; player.hp = player.maxHp; closeLevelUpMenu(); }
-btnSpd.onclick = () => { player.speed += 10; closeLevelUpMenu(); }
-
-function showLevelUpMenu(){
-  running=false;
-  levelUpMenu.style.display='block';
-}
-
-function closeLevelUpMenu(){
-  levelUpMenu.style.display='none';
-  player.levelingUp=false;
-  running=true;
-  lastTime=performance.now();
-  requestAnimationFrame(loop);
-}
-
-/* ---- UI Buttons ---- */
-startBtn.addEventListener('click',()=>startGame());
-restartBtn.addEventListener('click',()=>startGame());
-
-lastTime=performance.now();
-requestAnimationFrame(loop);
-</script>
+        // Start game
+        game.loadSave();
+        lastTime = performance.now();
+        requestAnimationFrame(loop);
+    </script>
 </body>
 </html>
